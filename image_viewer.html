@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片提示词查看器</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .export-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            background-color: #FF9800;
+            color: white;
+            cursor: pointer;
+            margin-left: 15px;
+            transition: background-color 0.3s;
+        }
+        .export-btn:hover {
+            background-color: #F57C00;
+        }
+        .header h1 {
+            margin: 0;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .filter-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .filter-btn:hover {
+            background-color: #45a049;
+        }
+        .filter-btn.active {
+            background-color: #2E7D32;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .card-image {
+            height: 300px;
+            overflow: hidden;
+            position: relative;
+        }
+        .card-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transition: transform 0.3s;
+        }
+        .card:hover .card-image img {
+            transform: scale(1.05);
+        }
+        .card-content {
+            padding: 15px;
+        }
+        .card-id {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+        .card-prompt {
+            font-size: 0.9em;
+            color: #555;
+            margin-bottom: 15px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        .card-actions {
+            display: flex;
+            justify-content: space-between;
+            gap: 5px;
+        }
+        .tag-btn {
+            flex: 1;
+            padding: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .good-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .perfect-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+        .abandon-btn {
+            background-color: #F44336;
+            color: white;
+        }
+        .tag-btn:hover {
+            opacity: 0.9;
+        }
+        .tag-btn.active {
+            box-shadow: 0 0 0 2px #333;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+        }
+        .modal-content {
+            position: relative;
+            margin: auto;
+            padding: 0;
+            width: 80%;
+            max-width: 1000px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .modal-image {
+            width: 100%;
+            max-height: 85vh;
+            object-fit: contain;
+        }
+        .close {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            color: white;
+            font-size: 35px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .modal-nav {
+            position: absolute;
+            top: 50%;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        .modal-nav button {
+            background-color: rgba(0,0,0,0.5);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .modal-nav button:hover {
+            background-color: rgba(0,0,0,0.8);
+        }
+        .modal-info {
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 15px;
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>图片提示词查看器</h1>
+            <div>
+                <span id="stats">已加载: 0 / 0</span>
+                <button id="exportBtn" class="export-btn">导出标记表格</button>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="filter-btn active" data-filter="all">全部</button>
+            <button class="filter-btn" data-filter="good">Good</button>
+            <button class="filter-btn" data-filter="perfect">Perfect</button>
+            <button class="filter-btn" data-filter="abandon">Abandon</button>
+            <button class="filter-btn" data-filter="untagged">未标记</button>
+        </div>
+        
+        <div class="grid" id="image-grid">
+            <div class="loading">加载中，请稍候...</div>
+        </div>
+    </div>
+    
+    <div id="imageModal" class="modal">
+        <span class="close">&times;</span>
+        <div class="modal-content">
+            <img class="modal-image" id="modalImage">
+            <div class="modal-nav">
+                <button id="prevBtn">&lt;</button>
+                <button id="nextBtn">&gt;</button>
+            </div>
+            <div class="modal-info">
+                <div id="modalId"></div>
+                <div id="modalPrompt"></div>
+                <div id="modalTags"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 存储所有图片数据
+        const imageData = [];
+        let currentFilter = 'all';
+        let currentModalIndex = -1;
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadImageData();
+            setupEventListeners();
+            setupExportButton();
+        });
+        
+        // 手动添加图片数据
+        async function loadImageData() {
+            try {
+                // 获取文件夹数量（0-38）
+                const totalFolders = 39; // 根据之前的目录列表，有39个文件夹（0-38）
+                let loadedCount = 0;
+                
+                // 提示用户选择文件夹
+                document.querySelector('.loading').textContent = '请点击下方按钮选择(output/autoruns目录)';
+                
+                // 创建一个按钮，让用户选择目录
+                const selectDirBtn = document.createElement('button');
+                selectDirBtn.textContent = '选择autoruns目录';
+                selectDirBtn.style.padding = '10px 20px';
+                selectDirBtn.style.margin = '20px auto';
+                selectDirBtn.style.display = 'block';
+                selectDirBtn.style.backgroundColor = '#4CAF50';
+                selectDirBtn.style.color = 'white';
+                selectDirBtn.style.border = 'none';
+                selectDirBtn.style.borderRadius = '4px';
+                selectDirBtn.style.cursor = 'pointer';
+                
+                document.querySelector('.loading').appendChild(selectDirBtn);
+                
+                // 等待用户选择目录
+                const dirHandle = await new Promise((resolve) => {
+                    selectDirBtn.addEventListener('click', async () => {
+                        try {
+                            // 请求用户选择目录
+                            const dirHandle = await window.showDirectoryPicker({
+                                id: 'autoruns',
+                                startIn: 'documents',
+                                mode: 'read'
+                            });
+                            resolve(dirHandle);
+                        } catch (error) {
+                            console.error('选择目录时出错:', error);
+                            document.querySelector('.loading').textContent = '选择目录失败，请重试。';
+                            resolve(null);
+                        }
+                    });
+                });
+                
+                if (!dirHandle) {
+                    return;
+                }
+                
+                document.querySelector('.loading').textContent = '正在加载图片和提示词...';
+                
+                // 遍历目录中的文件夹
+                for (let i = 0; i < totalFolders; i++) {
+                    try {
+                        // 尝试获取子目录
+                        let subDirHandle;
+                        try {
+                            subDirHandle = await dirHandle.getDirectoryHandle(String(i));
+                        } catch (error) {
+                            console.warn(`文件夹 ${i} 不存在`);
+                            continue;
+                        }
+                        
+                        // 尝试读取提示词文件
+                        let promptFileHandle;
+                        try {
+                            promptFileHandle = await subDirHandle.getFileHandle('prompt.txt');
+                        } catch (error) {
+                            console.warn(`文件夹 ${i} 中没有prompt.txt文件`);
+                            continue;
+                        }
+                        
+                        // 读取提示词文件内容
+                        const promptFile = await promptFileHandle.getFile();
+                        const promptText = await promptFile.text();
+                        
+                        // 检查图片文件是否存在
+                        let imageFileHandle;
+                        try {
+                            imageFileHandle = await subDirHandle.getFileHandle('image.png');
+                        } catch (error) {
+                            console.warn(`文件夹 ${i} 中没有image.png文件`);
+                            continue;
+                        }
+                        
+                        // 获取图片URL
+                        const imageFile = await imageFileHandle.getFile();
+                        const imageUrl = URL.createObjectURL(imageFile);
+                        
+                        // 添加到数据数组
+                        imageData.push({
+                            id: i,
+                            prompt: promptText.trim(),
+                            imagePath: imageUrl,
+                            tags: [], // 初始没有标签
+                            dimensions: {width: 1024, height: 1216} // 设置图片尺寸为1024x1216
+                        });
+                        
+                        loadedCount++;
+                        // 更新统计信息
+                        document.getElementById('stats').textContent = `已加载: ${loadedCount} / ${totalFolders}`;
+                    } catch (error) {
+                        console.error(`加载文件夹 ${i} 时出错:`, error);
+                    }
+                }
+                
+                if (loadedCount === 0) {
+                    document.querySelector('.loading').textContent = '未能加载任何图片，请检查是否选择了正确的目录。';
+                    console.error('未能加载任何图片，请检查是否选择了正确的目录。');
+                    return;
+                }
+                
+                // 从本地存储加载标签
+                loadTagsFromLocalStorage();
+                
+                // 渲染图片网格
+                renderImageGrid();
+            } catch (error) {
+                console.error('加载图片数据时出错:', error);
+                document.querySelector('.loading').textContent = '加载失败，请检查文件路径是否正确。';
+            }
+        }
+        
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 过滤按钮点击事件
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentFilter = btn.dataset.filter;
+                    renderImageGrid();
+                });
+            });
+            
+            // 模态框关闭按钮
+            document.querySelector('.close').addEventListener('click', () => {
+                document.getElementById('imageModal').style.display = 'none';
+            });
+            
+            // 模态框导航按钮
+            document.getElementById('prevBtn').addEventListener('click', () => navigateModal(-1));
+            document.getElementById('nextBtn').addEventListener('click', () => navigateModal(1));
+            
+            // 点击模态框背景关闭
+            window.addEventListener('click', (e) => {
+                if (e.target === document.getElementById('imageModal')) {
+                    document.getElementById('imageModal').style.display = 'none';
+                }
+            });
+            
+            // 键盘导航
+            window.addEventListener('keydown', (e) => {
+                if (document.getElementById('imageModal').style.display === 'block') {
+                    if (e.key === 'ArrowLeft') navigateModal(-1);
+                    else if (e.key === 'ArrowRight') navigateModal(1);
+                    else if (e.key === 'Escape') document.getElementById('imageModal').style.display = 'none';
+                }
+            });
+        }
+        
+        // 渲染图片网格
+        function renderImageGrid() {
+            const grid = document.getElementById('image-grid');
+            grid.innerHTML = '';
+            
+            // 过滤图片
+            const filteredImages = imageData.filter(img => {
+                if (currentFilter === 'all') return true;
+                if (currentFilter === 'untagged') return img.tags.length === 0;
+                return img.tags.includes(currentFilter);
+            });
+            
+            if (filteredImages.length === 0) {
+                grid.innerHTML = '<div class="loading">没有符合条件的图片</div>';
+                return;
+            }
+            
+            // 创建卡片
+            filteredImages.forEach(img => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                // 获取图片尺寸
+                const dimensions = img.dimensions || {width: 1024, height: 1216};
+                
+                card.innerHTML = `
+                    <div class="card-image">
+                        <img src="${img.imagePath}" alt="图片 ${img.id}" loading="lazy" style="object-fit: contain;">
+                    </div>
+                    <div class="card-content">
+                        <div class="card-id">序号: ${img.id} | ${dimensions.width}x${dimensions.height}</div>
+                        <div class="card-prompt">${img.prompt}</div>
+                        <div class="card-actions">
+                            <button class="tag-btn good-btn ${img.tags.includes('good') ? 'active' : ''}" data-id="${img.id}" data-tag="good">Good</button>
+                            <button class="tag-btn perfect-btn ${img.tags.includes('perfect') ? 'active' : ''}" data-id="${img.id}" data-tag="perfect">Perfect</button>
+                            <button class="tag-btn abandon-btn ${img.tags.includes('abandon') ? 'active' : ''}" data-id="${img.id}" data-tag="abandon">Abandon</button>
+                        </div>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+                
+                // 图片点击事件 - 打开模态框
+                card.querySelector('.card-image').addEventListener('click', () => {
+                    openModal(filteredImages.indexOf(img), filteredImages);
+                });
+                
+                // 标签按钮点击事件
+                card.querySelectorAll('.tag-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const id = parseInt(e.target.dataset.id);
+                        const tag = e.target.dataset.tag;
+                        toggleTag(id, tag);
+                        e.target.classList.toggle('active');
+                    });
+                });
+            });
+        }
+        
+        // 打开模态框
+        function openModal(index, images) {
+            const modal = document.getElementById('imageModal');
+            const modalImage = document.getElementById('modalImage');
+            const modalId = document.getElementById('modalId');
+            const modalPrompt = document.getElementById('modalPrompt');
+            const modalTags = document.getElementById('modalTags');
+            
+            currentModalIndex = index;
+            const img = images[index];
+            
+            modalImage.src = img.imagePath;
+            
+            // 优化图片显示，设置样式以确保图片完整显示
+            modalImage.style.maxWidth = '100%';
+            modalImage.style.maxHeight = '85vh';
+            modalImage.style.objectFit = 'contain';
+            
+            // 显示图片尺寸信息
+            const dimensions = img.dimensions || {width: 1024, height: 1216};
+            modalId.textContent = `序号: ${img.id} | 尺寸: ${dimensions.width}x${dimensions.height}`;
+            modalPrompt.textContent = img.prompt;
+            
+            if (img.tags.length > 0) {
+                modalTags.textContent = `标签: ${img.tags.join(', ')}`;
+            } else {
+                modalTags.textContent = '标签: 无';
+            }
+            
+            modal.style.display = 'block';
+        }
+        
+        // 模态框导航
+        function navigateModal(direction) {
+            const filteredImages = imageData.filter(img => {
+                if (currentFilter === 'all') return true;
+                if (currentFilter === 'untagged') return img.tags.length === 0;
+                return img.tags.includes(currentFilter);
+            });
+            
+            let newIndex = currentModalIndex + direction;
+            
+            if (newIndex < 0) newIndex = filteredImages.length - 1;
+            if (newIndex >= filteredImages.length) newIndex = 0;
+            
+            openModal(newIndex, filteredImages);
+        }
+        
+        // 切换标签
+        function toggleTag(id, tag) {
+            const img = imageData.find(img => img.id === id);
+            if (!img) return;
+            
+            const tagIndex = img.tags.indexOf(tag);
+            
+            if (tagIndex === -1) {
+                // 添加标签前，移除可能冲突的标签
+                if (tag === 'good' || tag === 'perfect') {
+                    const abandonIndex = img.tags.indexOf('abandon');
+                    if (abandonIndex !== -1) img.tags.splice(abandonIndex, 1);
+                } else if (tag === 'abandon') {
+                    img.tags = img.tags.filter(t => t !== 'good' && t !== 'perfect');
+                }
+                
+                img.tags.push(tag);
+            } else {
+                img.tags.splice(tagIndex, 1);
+            }
+            
+            // 保存到本地存储
+            saveTagsToLocalStorage();
+            
+            // 如果当前过滤模式与移除的标签相关，则重新渲染
+            if (currentFilter !== 'all' && (currentFilter === tag || currentFilter === 'untagged')) {
+                renderImageGrid();
+            }
+        }
+        
+        // 保存标签到本地存储
+        function saveTagsToLocalStorage() {
+            const tagsData = {};
+            imageData.forEach(img => {
+                if (img.tags.length > 0) {
+                    tagsData[img.id] = img.tags;
+                }
+            });
+            localStorage.setItem('imageTags', JSON.stringify(tagsData));
+        }
+        
+        // 从本地存储加载标签
+        function loadTagsFromLocalStorage() {
+            try {
+                const tagsData = JSON.parse(localStorage.getItem('imageTags')) || {};
+                
+                Object.keys(tagsData).forEach(id => {
+                    const img = imageData.find(img => img.id === parseInt(id));
+                    if (img) {
+                        img.tags = tagsData[id];
+                    }
+                });
+            } catch (error) {
+                console.error('从本地存储加载标签时出错:', error);
+            }
+        }
+    // 设置导出按钮功能
+    function setupExportButton() {
+        const exportBtn = document.getElementById('exportBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', exportTagsToCSV);
+        }
+    }
+    
+    // 导出标记到CSV文件
+    function exportTagsToCSV() {
+        // 如果没有图片数据，则不执行导出
+        if (imageData.length === 0) {
+            alert('没有可导出的数据');
+            return;
+        }
+        
+        // 创建CSV内容 - 添加BOM以确保Excel正确识别UTF-8编码
+        const BOM = '\uFEFF';
+        
+        // 创建CSV行的函数 - 正确处理CSV格式
+        function escapeCSV(value) {
+            // 如果值包含逗号、引号或换行符，则需要用引号包裹
+            if (/[,"\n\r]/.test(value)) {
+                // 将所有引号替换为两个引号（CSV标准转义方式）
+                return '"' + value.replace(/"/g, '""') + '"';
+            }
+            return value;
+        }
+        
+        // 创建CSV头部
+        let rows = [];
+        rows.push(['序号', '标记列表']);
+        
+        // 按ID排序
+        const sortedData = [...imageData].sort((a, b) => a.id - b.id);
+        
+        // 添加每个图片的数据
+        sortedData.forEach(img => {
+            // 先对每个标签进行转义处理，然后用分号连接
+            let tagsStr;
+            if (img.tags.length > 0) {
+                // 对每个标签进行处理，确保其中的逗号不会影响 CSV 格式
+                const processedTags = img.tags.map(tag => {
+                    // 如果标签中包含分号，替换为空格或其他安全字符
+                    return tag.replace(/;/g, ' ');
+                });
+                tagsStr = processedTags.join(';');
+            } else {
+                tagsStr = '无标记';
+            }
+            
+            // 确保整个标签字符串被正确转义
+            rows.push([img.id.toString(), escapeCSV(tagsStr)]);
+        });
+        
+        // 将行转换为CSV格式
+        const csvContent = BOM + rows.map(row => row.join(',')).join('\r\n');
+        
+        // 创建Blob对象 - 使用正确的MIME类型
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+        
+        // 创建下载链接
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        // 设置下载属性
+        link.setAttribute('href', url);
+        link.setAttribute('download', `图片标记表_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.style.display = 'none';
+        
+        // 添加到文档并触发点击
+        document.body.appendChild(link);
+        link.click();
+        
+        // 清理
+        document.body.removeChild(link);
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 100);
+    }
+    </script>
+</body>
+</html>
