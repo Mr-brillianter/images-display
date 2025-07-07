@@ -1,5 +1,6 @@
 # [图片提示词查看器](https://mr-brillianter.github.io/images-display/)
 
+查看GitHub pages: [https://mr-brillianter.github.io/images-display/](https://mr-brillianter.github.io/images-display/)
 ## 项目简介
 
 这是一个用于查看和标记图片的Web应用程序。用户可以加载包含图片和提示词的目录，对图片进行查看、标记（Good、Perfect、Abandon），并将标记结果导出为CSV文件。
