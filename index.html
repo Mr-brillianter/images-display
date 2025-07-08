@@ -206,6 +206,34 @@
             width: 100%;
             box-sizing: border-box;
         }
+        .copy-btn {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: all 0.3s;
+        }
+        .copy-btn:hover {
+            background-color: #45a049;
+        }
+        .copy-btn.success {
+            background-color: #2E7D32;
+        }
+        .prompt-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .prompt-text {
+            flex-grow: 1;
+            margin-right: 10px;
+            overflow-y: auto;
+            max-height: 100px;
+        }
     </style>
 </head>
 <body>
@@ -241,7 +269,10 @@
             </div>
             <div class="modal-info">
                 <div id="modalId"></div>
-                <div id="modalPrompt"></div>
+                <div class="prompt-container">
+                    <div id="modalPromptText" class="prompt-text"></div>
+                    <button id="copyPromptBtn" class="copy-btn" title="复制提示词">复制提示词</button>
+                </div>
                 <div id="modalTags"></div>
             </div>
         </div>
@@ -263,9 +294,8 @@
         // 手动添加图片数据
         async function loadImageData() {
             try {
-                // 获取文件夹数量（0-38）
-                const totalFolders = 39; // 根据之前的目录列表，有39个文件夹（0-38）
                 let loadedCount = 0;
+                let totalFolders = 0;
                 
                 // 提示用户选择文件夹
                 document.querySelector('.loading').textContent = '请点击下方按钮选择(output/autoruns目录)';
@@ -291,7 +321,7 @@
                             // 请求用户选择目录
                             const dirHandle = await window.showDirectoryPicker({
                                 id: 'autoruns',
-                                startIn: 'documents',
+                                startIn: 'pictures',
                                 mode: 'read'
                             });
                             resolve(dirHandle);
@@ -310,23 +340,40 @@
                 document.querySelector('.loading').textContent = '正在加载图片和提示词...';
                 
                 // 遍历目录中的文件夹
-                for (let i = 0; i < totalFolders; i++) {
-                    try {
-                        // 尝试获取子目录
-                        let subDirHandle;
-                        try {
-                            subDirHandle = await dirHandle.getDirectoryHandle(String(i));
-                        } catch (error) {
-                            console.warn(`文件夹 ${i} 不存在`);
-                            continue;
+                try {
+                    // 获取所有子目录
+                    const subDirs = [];
+                    for await (const [name, handle] of dirHandle.entries()) {
+                        // 检查是否为目录
+                        if (handle.kind !== 'directory') continue;
+                        subDirs.push({ name, handle });
+                    }
+                    
+                    // 按数字顺序排序（如果目录名是数字）
+                    subDirs.sort((a, b) => {
+                        const numA = parseInt(a.name);
+                        const numB = parseInt(b.name);
+                        if (!isNaN(numA) && !isNaN(numB)) {
+                            return numA - numB;
                         }
+                        return a.name.localeCompare(b.name);
+                    });
+                    
+                    totalFolders = subDirs.length;
+                    
+                    // 遍历排序后的目录
+                    for (const { name, handle } of subDirs) {
+                        const subDirHandle = handle;
+                        
+                        // 尝试获取子目录
+                        //const subDirHandle = await dirHandle.getDirectoryHandle(name);
                         
                         // 尝试读取提示词文件
                         let promptFileHandle;
                         try {
                             promptFileHandle = await subDirHandle.getFileHandle('prompt.txt');
                         } catch (error) {
-                            console.warn(`文件夹 ${i} 中没有prompt.txt文件`);
+                            console.warn(`文件夹 ${name} 中没有prompt.txt文件`);
                             continue;
                         }
                         
@@ -339,7 +386,7 @@
                         try {
                             imageFileHandle = await subDirHandle.getFileHandle('image.png');
                         } catch (error) {
-                            console.warn(`文件夹 ${i} 中没有image.png文件`);
+                            console.warn(`文件夹 ${name} 中没有image.png文件`);
                             continue;
                         }
                         
@@ -349,7 +396,7 @@
                         
                         // 添加到数据数组
                         imageData.push({
-                            id: i,
+                            id: name,
                             prompt: promptText.trim(),
                             imagePath: imageUrl,
                             tags: [], // 初始没有标签
@@ -359,9 +406,9 @@
                         loadedCount++;
                         // 更新统计信息
                         document.getElementById('stats').textContent = `已加载: ${loadedCount} / ${totalFolders}`;
-                    } catch (error) {
-                        console.error(`加载文件夹 ${i} 时出错:`, error);
                     }
+                } catch (error) {
+                    console.error('加载文件夹时出错:', error);
                 }
                 
                 if (loadedCount === 0) {
@@ -483,8 +530,9 @@
             const modal = document.getElementById('imageModal');
             const modalImage = document.getElementById('modalImage');
             const modalId = document.getElementById('modalId');
-            const modalPrompt = document.getElementById('modalPrompt');
+            const modalPromptText = document.getElementById('modalPromptText');
             const modalTags = document.getElementById('modalTags');
+            const copyBtn = document.getElementById('copyPromptBtn');
             
             currentModalIndex = index;
             const img = images[index];
@@ -499,7 +547,7 @@
             // 显示图片尺寸信息
             const dimensions = img.dimensions || {width: 1024, height: 1216};
             modalId.textContent = `序号: ${img.id} | 尺寸: ${dimensions.width}x${dimensions.height}`;
-            modalPrompt.textContent = img.prompt;
+            modalPromptText.innerHTML = img.prompt.replace(/\n/g, '<br>');
             
             if (img.tags.length > 0) {
                 modalTags.textContent = `标签: ${img.tags.join(', ')}`;
@@ -582,86 +630,87 @@
                 console.error('从本地存储加载标签时出错:', error);
             }
         }
-    // 设置导出按钮功能
-    function setupExportButton() {
-        const exportBtn = document.getElementById('exportBtn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', exportTagsToCSV);
-        }
-    }
-    
-    // 导出标记到CSV文件
-    function exportTagsToCSV() {
-        // 如果没有图片数据，则不执行导出
-        if (imageData.length === 0) {
-            alert('没有可导出的数据');
-            return;
-        }
         
-        // 创建CSV内容 - 添加BOM以确保Excel正确识别UTF-8编码
-        const BOM = '\uFEFF';
-        
-        // 创建CSV行的函数 - 正确处理CSV格式
-        function escapeCSV(value) {
-            // 如果值包含逗号、引号或换行符，则需要用引号包裹
-            if (/[,"\n\r]/.test(value)) {
-                // 将所有引号替换为两个引号（CSV标准转义方式）
-                return '"' + value.replace(/"/g, '""') + '"';
+        // 设置导出按钮功能
+        function setupExportButton() {
+            const exportBtn = document.getElementById('exportBtn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', exportTagsToCSV);
             }
-            return value;
         }
         
-        // 创建CSV头部
-        let rows = [];
-        rows.push(['序号', '标记列表']);
-        
-        // 按ID排序
-        const sortedData = [...imageData].sort((a, b) => a.id - b.id);
-        
-        // 添加每个图片的数据
-        sortedData.forEach(img => {
-            // 先对每个标签进行转义处理，然后用分号连接
-            let tagsStr;
-            if (img.tags.length > 0) {
-                // 对每个标签进行处理，确保其中的逗号不会影响 CSV 格式
-                const processedTags = img.tags.map(tag => {
-                    // 如果标签中包含分号，替换为空格或其他安全字符
-                    return tag.replace(/;/g, ' ');
-                });
-                tagsStr = processedTags.join(';');
-            } else {
-                tagsStr = '无标记';
+        // 导出标记到CSV文件
+        function exportTagsToCSV() {
+            // 如果没有图片数据，则不执行导出
+            if (imageData.length === 0) {
+                alert('没有可导出的数据');
+                return;
             }
             
-            // 确保整个标签字符串被正确转义
-            rows.push([img.id.toString(), escapeCSV(tagsStr)]);
-        });
-        
-        // 将行转换为CSV格式
-        const csvContent = BOM + rows.map(row => row.join(',')).join('\r\n');
-        
-        // 创建Blob对象 - 使用正确的MIME类型
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-        
-        // 创建下载链接
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        
-        // 设置下载属性
-        link.setAttribute('href', url);
-        link.setAttribute('download', `图片标记表_${new Date().toISOString().slice(0, 10)}.csv`);
-        link.style.display = 'none';
-        
-        // 添加到文档并触发点击
-        document.body.appendChild(link);
-        link.click();
-        
-        // 清理
-        document.body.removeChild(link);
-        setTimeout(() => {
-            URL.revokeObjectURL(url);
-        }, 100);
-    }
+            // 创建CSV内容 - 添加BOM以确保Excel正确识别UTF-8编码
+            const BOM = '\uFEFF';
+            
+            // 创建CSV行的函数 - 正确处理CSV格式
+            function escapeCSV(value) {
+                // 如果值包含逗号、引号或换行符，则需要用引号包裹
+                if (/[,"\n\r]/.test(value)) {
+                    // 将所有引号替换为两个引号（CSV标准转义方式）
+                    return '"' + value.replace(/"/g, '""') + '"';
+                }
+                return value;
+            }
+            
+            // 创建CSV头部
+            let rows = [];
+            rows.push(['序号', '标记列表']);
+            
+            // 按ID排序
+            const sortedData = [...imageData].sort((a, b) => a.id - b.id);
+            
+            // 添加每个图片的数据
+            sortedData.forEach(img => {
+                // 先对每个标签进行转义处理，然后用分号连接
+                let tagsStr;
+                if (img.tags.length > 0) {
+                    // 对每个标签进行处理，确保其中的逗号不会影响 CSV 格式
+                    const processedTags = img.tags.map(tag => {
+                        // 如果标签中包含分号，替换为空格或其他安全字符
+                        return tag.replace(/;/g, ' ');
+                    });
+                    tagsStr = processedTags.join(';');
+                } else {
+                    tagsStr = '无标记';
+                }
+                
+                // 确保整个标签字符串被正确转义
+                rows.push([img.id.toString(), escapeCSV(tagsStr)]);
+            });
+            
+            // 将行转换为CSV格式
+            const csvContent = BOM + rows.map(row => row.join(',')).join('\r\n');
+            
+            // 创建Blob对象 - 使用正确的MIME类型
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+            
+            // 创建下载链接
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            // 设置下载属性
+            link.setAttribute('href', url);
+            link.setAttribute('download', `图片标记表_${new Date().toISOString().slice(0, 10)}.csv`);
+            link.style.display = 'none';
+            
+            // 添加到文档并触发点击
+            document.body.appendChild(link);
+            link.click();
+            
+            // 清理
+            document.body.removeChild(link);
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
     </script>
 </body>
 </html>
